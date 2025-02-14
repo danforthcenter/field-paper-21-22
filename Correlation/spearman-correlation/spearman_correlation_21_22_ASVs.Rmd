@@ -1,0 +1,276 @@
+---
+title: "Spearman C orrelation 21_22 ASVs"
+output: html_document
+date: "2025-01-29"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+# Load necessary libraries
+library(readr)
+library(ggplot2)
+library(tidyverse)
+library(Hmisc)
+
+# Read ASV abundance table
+asv_data <- read_csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/asvTable_Abnd_25_or_more.csv")
+
+# Convert to numeric matrix (ensure it’s non-negative)
+asv_data_numeric <- as.data.frame(lapply(asv_data, as.numeric))
+
+# Define the ASV of interest
+ASV_of_interest <- "ASV18093"  # Replace with your ASV of interest
+
+ASV_of_interest_samples <- asv_data_numeric[asv_data_numeric[[ASV_of_interest]] > 0,]
+#ASV_of_interest_shared_ASVs <- ASV_of_interest_samples[,colSums(ASV_of_interest_samples) > 0]
+
+# Identify ASVs that appear in at least one of these samples (union of nonzero ASVs)
+union_ASVs <- colnames(ASV_of_interest_samples)[colSums(ASV_of_interest_samples) > 0]
+
+# Subset ASV_of_interest_shared_ASVs to include only ASVs in the union
+ASV_union_subset <- ASV_of_interest_samples[, union_ASVs]
+
+asv_of_interest_index <- which(colnames(ASV_union_subset) == ASV_of_interest)
+
+# Get the number of ASVs
+n <- ncol(ASV_union_subset)
+
+# Initialize result vectors using ASV names
+cor_values <- rep(NA, n)
+names(cor_values) <- colnames(ASV_union_subset)
+
+p_values <- rep(NA, n)
+names(p_values) <- colnames(ASV_union_subset)
+
+# Loop through all other ASVs
+for (i in 1:n) {
+  if (i != asv_of_interest_index) {
+    # Check if ASV has nonzero values
+    if (sum(ASV_union_subset[, i]) > 0) {
+      # Compute Spearman correlation
+      correlation_result <- cor.test(ASV_union_subset[, asv_of_interest_index], 
+                                     ASV_union_subset[, i], 
+                                     method = "spearman", exact = FALSE)
+      cor_values[i] <- correlation_result$estimate
+      p_values[i] <- correlation_result$p.value
+    }
+  }
+}
+
+# Combine the correlation values and p-values into a data frame
+cor_results <- data.frame(#ASV = colnames(ASV_of_interest_shared_ASVs),
+                          Correlation = cor_values,
+                          P_Value = p_values)
+
+# Filter results for significant correlations (p < 0.05)
+significant_results <- cor_results[cor_results$P_Value < 0.05, ]
+
+# Plot significant correlations
+# ggplot(significant_results, aes(x = 1:nrow(significant_results), y = Correlation)) + 
+#   geom_point(aes(color = P_Value < 0.05), alpha = 0.6) + 
+#   geom_smooth(method = "lm", color = "red", se = FALSE) + 
+#   scale_color_manual(values = c("gray", "blue")) +  # Blue for significant, gray for non-significant
+#   theme_minimal() +
+#   labs(title = paste("Spearman Correlation of", ASV_of_interest, "with Other ASVs"),
+#        x = "ASVs", 
+#        y = "Correlation Coefficient") + 
+#   scale_x_continuous(breaks = seq(1, nrow(significant_results), by = 5000)) +  # Set breaks at intervals of 5000
+#   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+
+    
+```
+
+```{r cars}
+# Filter for positive correlations in significant results
+positive_results <- significant_results[significant_results$Correlation > 0, ]
+
+# Loop through each positive correlation and plot
+for (i in 1:nrow(positive_results)) {
+  # Get the name of the ASV with positive correlation
+  asv_name <- rownames(positive_results)[i]
+  
+  # Extract the Spearman correlation coefficient from union_filter
+  spearman_corr <- positive_results$Correlation[i]
+  
+  # Check if both ASV_of_interest and correlated ASV exist as columns
+  if (asv_name %in% colnames(ASV_of_interest_shared_ASVs) && ASV_of_interest %in% colnames(ASV_of_interest_shared_ASVs)) {
+    # Extract the columns for ASV of interest and the correlated ASV
+    ASV_of_interest_column <- ASV_of_interest_shared_ASVs[[ASV_of_interest]]
+    correlated_asv_column <- ASV_of_interest_shared_ASVs[[asv_name]]
+    
+    # Check for NA values in the columns
+    if (any(is.na(ASV_of_interest_column)) || any(is.na(correlated_asv_column))) {
+      warning(paste("NA values found for", ASV_of_interest, "or", asv_name))
+      next  # Skip this iteration if there are NA values
+    }
+    
+    # Create the data frame for plotting
+    plot_data <- data.frame(
+      asvi = ASV_of_interest_column,
+      Correlated_ASV = correlated_asv_column
+    )
+    
+    # Fit a linear model for the data
+    lm_model <- lm(Correlated_ASV ~ asvi, data = plot_data)
+    
+    # Extract the R² value from the model
+    r_squared <- summary(lm_model)$r.squared
+    
+    # Create scatter plot with line of best fit
+    p <- ggplot(plot_data, aes(x = asvi, y = Correlated_ASV)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add line of best fit
+      labs(title = paste("Correlation between", ASV_of_interest, "and", asv_name),
+           x = ASV_of_interest,
+           y = asv_name) +
+      annotate("text", x = max(plot_data$asvi) * 0.8, y = max(plot_data$Correlated_ASV) * 0.9,
+               label = paste("Spearman's rho = ", round(spearman_corr, 2)), color = "red", size = 5) +  # Add Spearman's rho on the plot
+      theme_minimal()
+    
+    # Print the plot
+    print(p)
+    
+    file_name <- sprintf("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/ASV18093/scatter_plot_%s_vs_%s.png", ASV_of_interest, asv_name)
+    
+    ggsave(file_name, plot = p, width = 8, height = 6, dpi = 300)
+  }
+}
+
+```
+
+```{r cars}
+# Check the union of our filtered ASVs
+library(dplyr)
+
+# Convert asv_data_numeric to presence/absence
+asv_presence <- ASV_of_interest_shared_ASVs %>%
+  mutate(across(everything(), ~ifelse(. > 0, 1, 0)))
+
+# Determine the union: Keep rows where ASV of interest or any other ASV is present
+asv_union <- asv_presence %>%
+  filter(asv_presence[[ASV_of_interest]] == 1 | rowSums(asv_presence[,]) > 0)
+
+row_indices <- as.numeric(rownames(asv_union))
+
+# Make a subset of the asv_data based on presence/absence of ASV in a sample
+asv_union_subset <- as.matrix(asv_data[row_indices, ])
+
+# Get the number of ASVs
+n2 <- ncol(asv_union_subset)
+
+# Initialize result vectors using ASV names
+cor_values_union <- rep(NA, n2)
+names(cor_values_union) <- colnames(asv_union_subset)
+
+p_values_union <- rep(NA, n2)
+names(p_values_union) <- colnames(asv_union_subset)
+
+# Loop through all other ASVs
+for (i in 1:ncol(asv_union_subset)) {
+  if (i != asv_of_interest_index) {
+    if (sum(asv_union_subset[, i]) > 0) {
+      correlation_result_union <- cor.test(asv_union_subset[, asv_of_interest_index], 
+                                     asv_union_subset[, i], 
+                                     method = "spearman", exact = FALSE, use = "complete.obs")
+      cor_values_union[i] <- correlation_result_union$estimate
+      p_values_union[i] <- correlation_result_union$p.value
+    } else {
+      cor_values_union[i] <- NA  # No non-zero values for this ASV
+      p_values_union[i] <- NA
+    }
+  }
+}
+# Combine the correlation values and p-values into a data frame
+cor_results_union <- data.frame(ASV = colnames(asv_union_subset),
+                          Correlation_u = cor_values_union,
+                          P_Value_u = p_values_union)
+
+# Filter results for significant correlations (p < 0.05)
+significant_results_union <- cor_results_union[cor_results_union$P_Value < 0.05, ]
+
+# Plot significant correlations
+ggplot(significant_results_union, aes(x = 1:nrow(significant_results_union), y = Correlation_u)) + 
+  geom_point(aes(color = P_Value_u < 0.05), alpha = 0.6) + 
+  geom_smooth(method = "lm", color = "red", se = FALSE) + 
+  scale_color_manual(values = c("gray", "blue")) +  # Blue for significant, gray for non-significant
+  theme_minimal() +
+  labs(title = paste("Spearman Correlation of", ASV_of_interest, "with Other ASVs"),
+       x = "ASVs", 
+       y = "Correlation Coefficient") + 
+  scale_x_continuous(breaks = seq(1, nrow(significant_results_union), by = 1)) +  # Set breaks at intervals of 5000
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r cars}
+# Filter for positive correlations greater than 0.39
+union_filter <- significant_results_union[significant_results_union$Correlation > 0.39, ]
+
+# Loop through each positive correlation and plot
+for (i in 1:nrow(union_filter)) {
+  # Get the name of the ASV with positive correlation
+  asv_name <- rownames(union_filter)[i]
+  
+  # Extract the Spearman correlation coefficient from union_filter
+  spearman_corr <- union_filter$Correlation[i]
+  
+  # Check if both ASV_of_interest and correlated ASV exist as columns
+  if (asv_name %in% colnames(asv_union_subset) && ASV_of_interest %in% colnames(asv_union_subset) )
+      {
+    # Extract the columns for ASV of interest and the correlated ASV
+    ASV_of_interest_column <- asv_union_subset[, ASV_of_interest]
+    correlated_asv_column <- asv_union_subset[, asv_name]
+    
+    # Check for NA values in the columns
+    if (any(is.na(ASV_of_interest_column)) || any(is.na(correlated_asv_column))) {
+      warning(paste("NA values found for", ASV_of_interest, "or", asv_name))
+      next  # Skip this iteration if there are NA values
+    }
+    
+    # Create the data frame for plotting
+    plot_data <- data.frame(
+      asvi = ASV_of_interest_column,
+      Correlated_ASV = correlated_asv_column
+    )
+    
+    # Fit a linear model for the data
+    lm_model <- lm(Correlated_ASV ~ asvi, data = plot_data)
+    
+    # Extract the R² value from the model
+    r_squared <- summary(lm_model)$r.squared
+    
+    # Create scatter plot with line of best fit
+    p <- ggplot(plot_data, aes(x = asvi, y = Correlated_ASV)) +
+      geom_point() +
+      geom_smooth(method = "lm", se = FALSE, color = "blue") +  # Add line of best fit
+      labs(title = paste("Correlation between", ASV_of_interest, "and", asv_name),
+           x = ASV_of_interest,
+           y = asv_name) +
+      annotate("text", x = max(plot_data$asvi) * 0.8, y = max(plot_data$Correlated_ASV) * 0.9,
+               label = paste("Spearman's rho = ", round(spearman_corr, 2)), color = "red", size = 5) +  # Add Spearman's rho on the plot
+      theme_minimal()
+
+    # Print the plot
+    print(p)
+    
+    file_name <- sprintf("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/%s_union/scatter_plot_%s_vs_%s.png", ASV_of_interest, ASV_of_interest, asv_name)
+    
+    ggsave(file_name, plot = p, width = 8, height = 6, dpi = 300)
+    }
+}
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
