@@ -13,10 +13,10 @@ if (length(args) != 3) {
   stop("Error: Incorrect number of arguments. Expected 3: BLO_consensus_file, asv_data_file, output_directory.")
 }
 
-blo_consensus_file <- args[1]
+BLO_consensus_file <- args[1]
 asv_data_file <- args[2]
 output_directory <- args[3]
-print(args)
+
 # Read BLO_consensus_file and extract the second column (sseqid)
 asv_list <- tryCatch(
   {
