@@ -16,7 +16,7 @@ if (length(args) != 3) {
 blo_consensus_file <- args[1]
 asv_data_file <- args[2]
 output_directory <- args[3]
-
+print(args)
 # Read BLO_consensus_file and extract the second column (sseqid)
 asv_list <- tryCatch(
   {
