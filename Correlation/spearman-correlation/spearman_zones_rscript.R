@@ -1,4 +1,9 @@
 #!/usr/bin/env Rscript
+
+## This script performs Spearman correlation analysis between a target ASV and all other ASVs in a dataset.
+## It generates correlation results and abundance plots for the top N correlated ASVs.
+## Usage: Rscript spearman_zones_rscript.R BLO_consensus_file asv_data_file output_directory
+
 # Load necessary libraries
 library(readr)
 library(ggplot2)
