@@ -78,7 +78,8 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
   if (!dir.exists(save_path)) {
     dir.create(save_path, recursive = TRUE)
   } else {
-    next((paste("Directory already exists, skipping ASV", ASV_of_interest)) # Skip if already processed
+    message(paste("Directory already exists, skipping ASV", ASV_of_interest)) # Skip if already processed
+    next # Skip to next ASV
   }
 
   # Subset data to only include overlapping ASVs
