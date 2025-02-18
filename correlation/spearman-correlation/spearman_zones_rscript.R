@@ -79,7 +79,7 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
     dir.create(save_path, recursive = TRUE)
   } else {
     message(paste("Directory already exists, skipping ASV", ASV_of_interest)) # Skip if already processed
-    next # Skip to next ASV
+    return(NULL) # Skip to next ASV
   }
 
   # Subset data to only include overlapping ASVs
@@ -115,6 +115,7 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
 
   # Create results dataframe and filter by p-value < 0.05
   cor_results <- data.frame(
+    ASV_of_Interest = rep(ASV_of_interest, length(overlapping_asvs)), # Add ASV_of_interest as the first column
     ASV = overlapping_asvs,
     Correlation = cor_values,
     P_Value = p_values,
