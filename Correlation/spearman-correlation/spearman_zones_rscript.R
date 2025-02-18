@@ -54,7 +54,7 @@ rownames(asv_data_numeric) <- asv_data_numeric[[1]]
 asv_data_numeric <- asv_data_numeric[, -1]
 
 # Function to analyze ASV correlation
-analyze_asv_correlation <- function(ASV_of_interest, base_save_path, top_n = 10) {
+analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
   # Check if ASV exists in the dataset
   if (!(ASV_of_interest %in% colnames(asv_data_numeric))) {
     message(paste("ASV", ASV_of_interest, "not found in the dataset"))
@@ -86,8 +86,11 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path, top_n = 10)
   # Initialize vectors for correlation and p-values
   cor_values <- numeric(length(overlapping_asvs))
   p_values <- numeric(length(overlapping_asvs))
+  shared_samples_count <- numeric(length(overlapping_asvs))
+
   names(cor_values) <- overlapping_asvs
   names(p_values) <- overlapping_asvs
+  names(shared_samples_count) <- overlapping_asvs
 
   # Perform Spearman correlation
   for (current_asv in overlapping_asvs) {
@@ -98,9 +101,12 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path, top_n = 10)
       )
       cor_values[current_asv] <- correlation_result$estimate
       p_values[current_asv] <- correlation_result$p.value
+      shared_samples_count[current_asv] <-
+        sum(asv_data_numeric[, ASV_of_interest] != 0 & asv_data_with_overlaps[, current_asv] != 0)
     } else {
       cor_values[current_asv] <- NA
       p_values[current_asv] <- NA
+      shared_samples_count[current_asv] <- 0
     }
   }
 
@@ -108,10 +114,11 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path, top_n = 10)
   cor_results <- data.frame(
     ASV = overlapping_asvs,
     Correlation = cor_values,
-    P_Value = p_values
+    P_Value = p_values,
+    Shared_Samples = shared_samples_count
   ) %>%
     arrange(P_Value) %>% # Sort by lowest p-value
-    filter(P_Value < 0.05, !is.na(Correlation))
+    filter(P_Value < 0.05, !is.na(Correlation), Correlation >= 0.5)
 
   # Save significant results
   if (nrow(cor_results) > 0) {
