@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 ## This script performs Spearman correlation analysis between a target ASV and all other ASVs in a dataset.
-## It generates correlation results and abundance plots for the top N correlated ASVs.
+## It generates correlation results and abundance plots for the correlated ASVs greater than 0.5.
 ## Usage: Rscript spearman_zones_rscript.R BLO_consensus_file asv_data_file output_directory
 
 # Load necessary libraries
@@ -124,10 +124,7 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
   if (nrow(cor_results) > 0) {
     write_csv(cor_results, file.path(save_path, paste0("correlation_results_", ASV_of_interest, ".csv")))
 
-    # Generate abundance plots for top N correlated ASVs
-    top_results <- head(cor_results, top_n)
-
-    for (asv_correlated in top_results$ASV) {
+    for (asv_correlated in cor_results$ASV) {
       plot_file <- file.path(save_path, paste0("abundance_plot_", asv_correlated, ".png"))
 
       p <- ggplot(asv_data_numeric, aes(x = .data[[ASV_of_interest]], y = .data[[asv_correlated]])) +
