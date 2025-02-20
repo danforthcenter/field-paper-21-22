@@ -39,7 +39,6 @@ get_samples_with_helpers <- function(helper_asvs, asv_data_numeric) {
 }
 
 library(dplyr)
-
 # Function to extract the helper ASVs from the main ASV data
 get_helper_abundance <- function(asv_data, helper_asvs) {
   # Subset only the helper ASVs from the main ASV abundance table
@@ -88,7 +87,7 @@ save_results <- function(highest_abundance_per_helper, highest_combined_sample, 
   # Save highest combined abundance sample info
   write.csv(data.frame(Sample = highest_combined_sample$Sample, Combined_Abundance = highest_combined_sample$Combined_Abundance),
     file.path(output_directory, "combined_helper_abundance.csv"),
-    row.names = FALSE
+    row.names = TRUE
   )
 
   cat("Results saved to", output_directory, "\n")
