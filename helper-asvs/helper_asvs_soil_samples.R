@@ -1,5 +1,6 @@
 # Load  data
-load("/path/to/asvTable_noAbnd.Rdata") # Load the asvTable_noAbnd data
+load("/Users/eflom/Downloads/asvTable_noAbnd.rdata") # Load the asvTable_noAbnd data
+asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
 
 library("readxl")
 sheet_names <- excel_sheets(
@@ -13,7 +14,6 @@ df_list <- lapply(sheet_names, function(sheet) {
 })
 names(df_list) <- sheet_names
 rr <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "rr")
-re <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = )
 re <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "re")
 s <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "s")
 
@@ -40,28 +40,27 @@ get_samples_with_helpers <- function(helper_asvs, asv_data_numeric) {
 
 library(dplyr)
 # Function to extract the helper ASVs from the main ASV data
-get_helper_abundance <- function(asv_data, helper_asvs) {
+get_helper_abundance <- function(asv_data, helper_df) {
   # Subset only the helper ASVs from the main ASV abundance table
-
-  valid_helpers <- intersect(helper_asvs$ASV, colnames(asv_data))
+  helper_asvs <- unique(helper_df$ASV)
+  valid_helpers <- intersect(helper_asvs, colnames(asv_data))
   # Subset only the valid helper ASVs
   helper_abundance_data <- asv_data[, valid_helpers, drop = FALSE]
+  # Check if any valid helpers were found
+  if (ncol(helper_abundance_data) == 0) {
+    warning("No valid helper ASVs found in the asvTable.")
+  }
+
   return(helper_abundance_data)
 }
 
 # Function to find the highest abundance sample for each helper ASV
 get_highest_abundance_per_helper <- function(helper_abundance_data) {
-  # Initialize empty vectors to store the results
-  sample_names <- c()
-  abundance_values <- c()
-  helper_asvs <- c()
+  # Initialize empty list to store results
+  result_list <- list()
 
   # Loop through each ASV and extract top 10 samples and abundance
   lapply(colnames(helper_abundance_data), function(asv) {
-    # Initialize the vectors in the global environment
-    sample_names <<- c()
-    abundance_values <<- c()
-    helper_asvs <<- c()
     # Extract the abundance values for the current ASV
     abundance_values <- helper_abundance_data[[asv]]
 
@@ -71,13 +70,12 @@ get_highest_abundance_per_helper <- function(helper_abundance_data) {
     # Sort the abundance values and sample names based on sorted indices
     sorted_abundance <- abundance_values[sorted_indices]
 
-    # Sample names (rownames) corresponding to the sorted abundance
-    top_10_samples <- rownames(helper_abundance_data)[sorted_indices][1:10]
-    top_10_abundance <- sorted_abundance[1:10] # Sorted abundance values
+    # Define the number of samples (top 10 or less if not available)
+    num_samples <- min(10, length(sorted_abundance)) # Ensure we don't go beyond available samples
 
-    # Debugging output
-    message(paste("Checking ASV:", asv))
-    message("Sorted abundance: ", paste(sorted_abundance, collapse = ", "))
+    # Sample names (rownames) corresponding to the sorted abundance
+    top_10_samples <- rownames(helper_abundance_data)[sorted_indices][1:num_samples]
+    top_10_abundance <- sorted_abundance[1:num_samples]
 
     # Ensure there are at least some non-zero values
     if (length(sorted_abundance) == 0 || all(sorted_abundance == 0)) {
@@ -87,25 +85,28 @@ get_highest_abundance_per_helper <- function(helper_abundance_data) {
 
     # Mismatch check
     if (length(top_10_samples) != length(top_10_abundance)) {
-      message("Mismatch in top 10 sample and abundance lengths!")
+      message("Mismatch in top samples and abundance lengths!")
       message("Length of top_10_samples: ", length(top_10_samples))
       message("Length of top_10_abundance: ", length(top_10_abundance))
       return(NULL)
     }
 
-    # Append the results directly to the vectors
-    sample_names <<- c(sample_names, top_10_samples)
-    abundance_values <<- c(abundance_values, top_10_abundance)
-    helper_asvs <<- c(helper_asvs, rep(asv, length(top_10_samples)))
+    # Append the results to a list
+    result_list[[asv]] <- data.frame(
+      Sample = top_10_samples,
+      Helper_ASV = rep(asv, num_samples),
+      Abundance = top_10_abundance,
+      stringsAsFactors = FALSE
+    )
   })
 
-  # Combine the vectors into a data frame
-  result_df <- data.frame(
-    Sample = sample_names,
-    Helper_ASV = helper_asvs,
-    Abundance = abundance_values,
-    stringsAsFactors = FALSE
-  )
+  # Combine all ASV results into a single data frame
+  result_df <- do.call(rbind, result_list)
+
+  # Print vector lengths for debugging
+  print(length(result_df$Sample))
+  print(length(result_df$Helper_ASV))
+  print(length(result_df$Abundance))
 
   return(result_df)
 }
@@ -158,16 +159,12 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
 
   # Get helper ASV abundance data from the main table
   helper_abundance_data <- get_helper_abundance(asv_data, helper_df)
-  print(helper_abundance_data)
   # Find the highest abundance sample for each helper ASV
   highest_abundance_per_helper <- get_highest_abundance_per_helper(helper_abundance_data)
-  print(highest_abundance_per_helper)
   # Get combined abundance across all helper ASVs for each sample
   combined_abundance <- get_combined_helper_abundance(helper_abundance_data)
-  print(combined_abundance)
   # Find the sample with the highest combined abundance
   highest_combined_sample <- get_top_10_combined_abundance_samples(combined_abundance)
-  print(highest_combined_sample)
   # Save the results to CSV files
   save_results(highest_abundance_per_helper, highest_combined_sample, output_directory)
 
