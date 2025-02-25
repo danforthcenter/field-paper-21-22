@@ -1,6 +1,10 @@
 # Load  data
-load("/Users/eflom/Downloads/asvTable_noAbnd.rdata") # Load the asvTable_noAbnd data
+load("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/asvTable_noAbnd.rdata")
+# Load the asvTable_noAbnd data
 asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
+# Load the taxa
+load("/Users/eflom/Downloads/primerless_taxa_rdp.rdata")
+taxa_asvs <- rownames(taxa)
 
 library("readxl")
 sheet_names <- excel_sheets(
@@ -60,23 +64,18 @@ get_highest_abundance_per_helper <- function(helper_abundance_data) {
   result_list <- list()
 
   # Loop through each ASV and extract top 10 samples and abundance
-  lapply(colnames(helper_abundance_data), function(asv) {
+  for (asv in colnames(helper_abundance_data)) {
     # Extract the abundance values for the current ASV
     abundance_values <- helper_abundance_data[[asv]]
-
     # Get the sorted indices for abundance (in decreasing order)
     sorted_indices <- order(abundance_values, decreasing = TRUE)
-
     # Sort the abundance values and sample names based on sorted indices
     sorted_abundance <- abundance_values[sorted_indices]
-
     # Define the number of samples (top 10 or less if not available)
     num_samples <- min(10, length(sorted_abundance)) # Ensure we don't go beyond available samples
-
     # Sample names (rownames) corresponding to the sorted abundance
     top_10_samples <- rownames(helper_abundance_data)[sorted_indices][1:num_samples]
     top_10_abundance <- sorted_abundance[1:num_samples]
-
     # Ensure there are at least some non-zero values
     if (length(sorted_abundance) == 0 || all(sorted_abundance == 0)) {
       message(paste("No valid abundance for ASV:", asv))
@@ -98,15 +97,10 @@ get_highest_abundance_per_helper <- function(helper_abundance_data) {
       Abundance = top_10_abundance,
       stringsAsFactors = FALSE
     )
-  })
+  }
 
   # Combine all ASV results into a single data frame
   result_df <- do.call(rbind, result_list)
-
-  # Print vector lengths for debugging
-  print(length(result_df$Sample))
-  print(length(result_df$Helper_ASV))
-  print(length(result_df$Abundance))
 
   return(result_df)
 }
@@ -128,16 +122,16 @@ get_top_10_combined_abundance_samples <- function(combined_abundance) {
 }
 
 # Function to save results as CSV
-save_results <- function(highest_abundance_per_helper, highest_combined_sample, output_directory) {
+save_results <- function(highest_abundance_per_helper, highest_combined_sample, helper_df_name, output_directory) {
   # Ensure highest_abundance_per_helper is formatted correctly
   summary_results <- data.frame(
-    Sample = as.character(highest_abundance_per_helper[1, ]), # Ensure it's character
-    Helper_ASV = rep(colnames(highest_abundance_per_helper), each = nrow(highest_abundance_per_helper) / 2),
-    Abundance = as.numeric(highest_abundance_per_helper[2, ]) # Ensure numeric
+    Sample = as.character(highest_abundance_per_helper$Sample), # Ensure it's character
+    Helper_ASV = highest_abundance_per_helper$Helper_ASV,
+    Abundance = as.numeric(highest_abundance_per_helper$Abundance) # Ensure numeric
   )
 
   # Save individual helper abundance summary
-  write.csv(summary_results, file.path(output_directory, "helper_abundance_summary.csv"), row.names = FALSE)
+  write.csv(summary_results, file.path(output_directory, paste0(helper_df_name, "_helper_abundance_summary.csv")), row.names = FALSE)
 
   # Save highest combined abundance sample info
   write.csv(
@@ -145,7 +139,7 @@ save_results <- function(highest_abundance_per_helper, highest_combined_sample, 
       Sample = highest_combined_sample$Sample,
       Combined_Abundance = highest_combined_sample$Combined_Abundance
     ),
-    file.path(output_directory, "combined_helper_abundance.csv"),
+    file.path(output_directory, paste0(helper_df_name, "_combined_helper_abundance.csv")),
     row.names = FALSE
   )
 
@@ -154,9 +148,6 @@ save_results <- function(highest_abundance_per_helper, highest_combined_sample, 
 
 # Main function to process helper abundance data
 process_helper_abundance <- function(asv_data, helper_df, output_directory) {
-  # Get the helper ASVs
-  helper_asvs <- unique(helper_df$ASV)
-
   # Get helper ASV abundance data from the main table
   helper_abundance_data <- get_helper_abundance(asv_data, helper_df)
   # Find the highest abundance sample for each helper ASV
@@ -165,8 +156,16 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   combined_abundance <- get_combined_helper_abundance(helper_abundance_data)
   # Find the sample with the highest combined abundance
   highest_combined_sample <- get_top_10_combined_abundance_samples(combined_abundance)
+  # Pull out helper_df character name
+  helper_df_name <- as.character(match.call()[[3]])
   # Save the results to CSV files
-  save_results(highest_abundance_per_helper, highest_combined_sample, output_directory)
+  save_results(highest_abundance_per_helper, highest_combined_sample, helper_df_name, output_directory)
+
+  taxa_data <- taxa[taxa_asvs %in% unique(re$ASV), ]
+
+
+  # Save the merged data to a CSV file
+  write.csv(taxa_data, file.path(output_directory, paste0(helper_df_name, "_helper_taxa.csv")), row.names = TRUE)
 
   cat("Processing complete.\n")
 }
