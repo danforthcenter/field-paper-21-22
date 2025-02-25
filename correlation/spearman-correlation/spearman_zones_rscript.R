@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 
 ## This script performs Spearman correlation analysis between a target ASV and all other ASVs in a dataset.
+## It identifies samples where the target ASV from the BLO consensus file is present and another ASV is present.
 ## It generates correlation results and abundance plots for the correlated ASVs greater than 0.5.
 ## Usage: Rscript spearman_zones_rscript.R BLO_consensus_file asv_data_file output_directory
 
@@ -85,7 +86,6 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
   # Subset data to only include overlapping ASVs
   asv_data_with_overlaps <- asv_data_numeric[, overlapping_asvs, drop = FALSE]
 
-
   # Initialize vectors for correlation and p-values
   cor_values <- numeric(length(overlapping_asvs))
   p_values <- numeric(length(overlapping_asvs))
@@ -131,6 +131,8 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
     for (asv_correlated in cor_results$ASV) {
       plot_file <- file.path(save_path, paste0("abundance_plot_", asv_correlated, ".png"))
 
+      rho_value <- cor_results$Correlation[cor_results$ASV == asv_correlated]
+
       p <- ggplot(asv_data_numeric, aes(x = .data[[ASV_of_interest]], y = .data[[asv_correlated]])) +
         geom_point(alpha = 0.6) +
         geom_smooth(method = "lm", se = FALSE, color = "blue") +
@@ -138,6 +140,12 @@ analyze_asv_correlation <- function(ASV_of_interest, base_save_path) {
           title = paste("Abundance correlation:", ASV_of_interest, "vs", asv_correlated),
           x = ASV_of_interest, y = asv_correlated
         ) +
+        annotate("text",
+          x = max(asv_data_numeric[[ASV_of_interest]]) * 0.8,
+          y = max(asv_data_numeric[[asv_correlated]]) * 0.9,
+          label = paste(expression(rho), " = ", round(rho_value, 2)),
+          color = "red", size = 5
+        ) + # Add Spearman's rho on the plot
         theme_minimal()
 
       ggsave(plot_file, plot = p, width = 6, height = 4, dpi = 300)
