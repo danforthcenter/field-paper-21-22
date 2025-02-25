@@ -1,7 +1,9 @@
 # Load  data
 load("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/asvTable_noAbnd.rdata")
 # Load the asvTable_noAbnd data
+library("compositions")
 asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
+asvTable <- as.data.frame(clr(asvTable + 0.1))
 # Load the taxa
 load("/Users/eflom/Downloads/primerless_taxa_rdp.rdata")
 taxa_asvs <- rownames(taxa)
@@ -161,7 +163,7 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   # Save the results to CSV files
   save_results(highest_abundance_per_helper, highest_combined_sample, helper_df_name, output_directory)
 
-  taxa_data <- taxa[taxa_asvs %in% unique(re$ASV), ]
+  taxa_data <- taxa[taxa_asvs %in% unique(helper_df$ASV), ]
 
 
   # Save the merged data to a CSV file
