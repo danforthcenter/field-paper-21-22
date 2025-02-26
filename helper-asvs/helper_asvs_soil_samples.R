@@ -1,9 +1,9 @@
 # Load  data
 load("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/asvTable_noAbnd.rdata")
 # Load the asvTable_noAbnd data
-library("compositions")
 asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
-asvTable <- as.data.frame(clr(asvTable + 0.1))
+asvTable <- asvTable / rowSums(asvTable) # Convert to relative abundance
+
 # Load the taxa
 load("/Users/eflom/Downloads/primerless_taxa_rdp.rdata")
 taxa_asvs <- rownames(taxa)
