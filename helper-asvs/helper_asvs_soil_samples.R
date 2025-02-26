@@ -1,52 +1,32 @@
-# Load  data
-load("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/asvTable_noAbnd.rdata")
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(tidyverse)
+library(ggplot2)
+
 # Load the asvTable_noAbnd data
 asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
+# Remove rows with zero ASV counts
+zero_sum_rows <- rowSums(asvTable) == 0
+asvTable <- asvTable[!zero_sum_rows, ]
+# Normalize the ASV table to relative abundance
 asvTable <- asvTable / rowSums(asvTable) # Convert to relative abundance
+
 
 # Load the taxa
 load("/Users/eflom/Downloads/primerless_taxa_rdp.rdata")
 taxa_asvs <- rownames(taxa)
 
-library("readxl")
-sheet_names <- excel_sheets(
-  "/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx"
-)
-df_list <- lapply(sheet_names, function(sheet) {
-  read_excel(
-    "/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx",
-    sheet = sheet
-  )
-})
-names(df_list) <- sheet_names
-rr <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "rr")
-re <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "re")
-s <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "s")
+# Load the correlation data for root rhizosphere, root endosphere, and soil
+root_rhizosphere <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "rr")
+root_endosphere <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "re")
+soil <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Correlation/spearman_correlation/combined_output_zones.xlsx", sheet = "s")
 
-# Extract the "ASV" column (helper ASVs) from the tibble
-s_helper_asvs <- unique(s$ASV)
-rr_helper_asvs <- unique(rr$ASV)
-re_helper_asvs <- unique(re$ASV)
-
-# Function to pull out samples with at least one helper ASV
-get_samples_with_helpers <- function(helper_asvs, asv_data_numeric) {
-  # Check if helper ASVs exist in the dataset
-  missing_asvs <- setdiff(helper_asvs, colnames(asv_data_numeric))
-  if (length(missing_asvs) > 0) {
-    warning(paste("Missing helper ASVs in the dataset:", paste(missing_asvs, collapse = ", ")))
-  }
-
-  # Subset the data where at least one of the helper ASVs has a non-zero value
-  helper_columns <- colnames(asv_data_numeric)[colnames(asv_data_numeric) %in% helper_asvs]
-  samples_with_helpers <- asv_data_numeric[rowSums(asv_data_numeric[, helper_columns] > 0) > 0, ]
-
-  # Return the samples with helper ASVs
-  return(samples_with_helpers)
-}
-
-library(dplyr)
 # Function to extract the helper ASVs from the main ASV data
 get_helper_abundance <- function(asv_data, helper_df) {
+  # Arrange by descending Correlation for each data frame using dplyr
+  helper_df <- dplyr::arrange(helper_df, desc(Correlation))
+  helper_df <- helper_df[1:10, ] # Limit to top 10 helpers
   # Subset only the helper ASVs from the main ASV abundance table
   helper_asvs <- unique(helper_df$ASV)
   valid_helpers <- intersect(helper_asvs, colnames(asv_data))
@@ -109,42 +89,21 @@ get_highest_abundance_per_helper <- function(helper_abundance_data) {
 
 
 # Function to calculate the combined abundance of all helpers for each sample
-get_combined_helper_abundance <- function(helper_abundance_data) {
+get_top_5_samples_for_helper_abundance <- function(helper_abundance_data) {
   # Sum the abundance of all helper ASVs for each sample
   combined_abundance <- rowSums(helper_abundance_data)
-  return(combined_abundance)
-}
 
-# Function to get the top 10 samples with highest combined abundance
-get_top_10_combined_abundance_samples <- function(combined_abundance) {
-  sorted_combined <- sort(combined_abundance, decreasing = TRUE)
-  top_10_samples <- names(sorted_combined)[1:10]
-  top_10_combined_abundance <- sorted_combined[1:10]
-  list(Sample = top_10_samples, Combined_Abundance = top_10_combined_abundance)
+  # Get the top 5 samples with the highest combined abundance
+  top_5_samples <- names(sort(combined_abundance, decreasing = TRUE)[1:5])
+  # Subset the data to include only the top 5 samples
+  top_5_samples_data <- helper_abundance_data[top_5_samples, , drop = FALSE]
+  return(top_5_samples_data)
 }
 
 # Function to save results as CSV
-save_results <- function(highest_abundance_per_helper, highest_combined_sample, helper_df_name, output_directory) {
-  # Ensure highest_abundance_per_helper is formatted correctly
-  summary_results <- data.frame(
-    Sample = as.character(highest_abundance_per_helper$Sample), # Ensure it's character
-    Helper_ASV = highest_abundance_per_helper$Helper_ASV,
-    Abundance = as.numeric(highest_abundance_per_helper$Abundance) # Ensure numeric
-  )
-
-  # Save individual helper abundance summary
-  write.csv(summary_results, file.path(output_directory, paste0(helper_df_name, "_helper_abundance_summary.csv")), row.names = FALSE)
-
+save_results <- function(top_5_samples, helper_df_name, output_directory) {
   # Save highest combined abundance sample info
-  write.csv(
-    data.frame(
-      Sample = highest_combined_sample$Sample,
-      Combined_Abundance = highest_combined_sample$Combined_Abundance
-    ),
-    file.path(output_directory, paste0(helper_df_name, "_combined_helper_abundance.csv")),
-    row.names = FALSE
-  )
-
+  write.csv(top_5_samples, file.path(output_directory, paste0(helper_df_name, "_top_5_samples.csv")), row.names = FALSE)
   cat("Results saved to", output_directory, "\n")
 }
 
@@ -152,22 +111,46 @@ save_results <- function(highest_abundance_per_helper, highest_combined_sample, 
 process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   # Get helper ASV abundance data from the main table
   helper_abundance_data <- get_helper_abundance(asv_data, helper_df)
-  # Find the highest abundance sample for each helper ASV
-  highest_abundance_per_helper <- get_highest_abundance_per_helper(helper_abundance_data)
-  # Get combined abundance across all helper ASVs for each sample
-  combined_abundance <- get_combined_helper_abundance(helper_abundance_data)
   # Find the sample with the highest combined abundance
-  highest_combined_sample <- get_top_10_combined_abundance_samples(combined_abundance)
-  # Pull out helper_df character name
+  top_5_samples <- get_top_5_samples_for_helper_abundance(helper_abundance_data)
+
+  # Reshape the data to long format for ggplot2
+  top_5_samples_long <- top_5_samples %>%
+    rownames_to_column("Sample") %>%
+    pivot_longer(cols = -Sample, names_to = "Helper_ASV", values_to = "Abundance") %>%
+    filter(!is.na(Abundance)) # Filter out any rows with NA values (if any)
+
+  # Pull out the helper_df string
   helper_df_name <- as.character(match.call()[[3]])
+  # Replace underscores with spaces
+  formatted_helper_df_name <- gsub("_", " ", helper_df_name)
+  # Capitalize the first letters of each word (using sub to capitalize the first letter of 'root' and 'endosphere')
+  formatted_helper_df_name <- sub("(^|\\s)([a-z])", "\\1\\U\\2", formatted_helper_df_name, perl = TRUE)
+  formatted_helper_df_name <- sub("(^|\\s)([a-z])", "\\1\\U\\2", formatted_helper_df_name, perl = TRUE)
+
   # Save the results to CSV files
-  save_results(highest_abundance_per_helper, highest_combined_sample, helper_df_name, output_directory)
+  save_results(top_5_samples, helper_df_name, output_directory)
 
+  # Save taxa data
   taxa_data <- taxa[taxa_asvs %in% unique(helper_df$ASV), ]
-
-
   # Save the merged data to a CSV file
   write.csv(taxa_data, file.path(output_directory, paste0(helper_df_name, "_helper_taxa.csv")), row.names = TRUE)
+
+  ggplot(top_5_samples_long, aes(x = Sample, y = Abundance, fill = Helper_ASV)) +
+    geom_bar(stat = "identity") +
+    theme_minimal() +
+    labs(
+      title = paste("Top 5 Samples for", formatted_helper_df_name, "Helper ASVs"),
+      x = "Samples", y = "Relative Abundance"
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    scale_x_discrete(drop = FALSE) # Ensure all Sample levels are shown, even if some have no data
+
+  # Save the plot
+  ggsave(
+    filename = paste0(output_directory, "/", helper_df_name, "_top_5_samples_abundance_plot.png"),
+    width = 12, height = 6
+  )
 
   cat("Processing complete.\n")
 }
