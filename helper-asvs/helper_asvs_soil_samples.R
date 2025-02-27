@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(tidyverse)
 library(ggplot2)
+library(RColorBrewer)
 
 # Load the asvTable_noAbnd data
 asvTable <- read.csv("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21_22_field_paper/Abundance/filtered_ASV_noabnd/asvTable_Abnd_25_or_more.csv", row.names = 1)
@@ -26,7 +27,8 @@ soil <- read_excel("/Users/eflom/Library/CloudStorage/OneDrive-DDPSC/bart_lab/21
 get_helper_abundance <- function(asv_data, helper_df) {
   # Arrange by descending Correlation for each data frame using dplyr
   helper_df <- dplyr::arrange(helper_df, desc(Correlation))
-  helper_df <- helper_df[1:10, ] # Limit to top 10 helpers
+  n_helpers <- min(10, nrow(helper_df)) # Get the smaller value between 10 and the number of helpers
+  helper_df <- helper_df[1:n_helpers, ] # Take top N (10) helpers
   # Subset only the helper ASVs from the main ASV abundance table
   helper_asvs <- unique(helper_df$ASV)
   valid_helpers <- intersect(helper_asvs, colnames(asv_data))
@@ -62,9 +64,8 @@ save_results <- function(top_5_samples, helper_df_name, output_directory) {
 # Main function to process helper abundance data
 process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   # Get helper ASV abundance data from the main table
-  helper_abundance_data_all <- get_helper_abundance(asv_data, helper_df)
-  helper_abundance_data <- helper_abundance_data_all[1:10, ] # Limit to top 10 helpers
-  # Find the sample with the highest combined abundance
+  helper_abundance_data <- get_helper_abundance(asv_data, helper_df)
+  # Get the top 5 samples with the highest combined abundance
   top_5_samples <- get_top_5_samples_for_helper_abundance(helper_abundance_data)
 
   ## ---- Top 5 Samples ----
@@ -73,14 +74,28 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
     rownames_to_column("Sample") %>%
     pivot_longer(cols = -Sample, names_to = "Helper_ASV", values_to = "Abundance") %>%
     filter(!is.na(Abundance)) # Filter out any rows with NA values (if any)
-
+  # Add a new column for the helper ASV label with the correlation coefficient
+  top_5_samples_long <- top_5_samples_long %>%
+    mutate(
+      Correlation = helper_df$Correlation[match(Helper_ASV, helper_df$ASV)], # Match correlation values
+      Helper_Label = paste(Helper_ASV, "(", round(Correlation, 2), ")", sep = "")
+    )
   ## ---- All samples ----
   # Convert the full helper abundance data to long format for ggplot2
-  all_samples_long <- helper_abundance_data_all %>%
+  all_samples_long <- helper_abundance_data %>%
     rownames_to_column("Sample") %>%
     pivot_longer(cols = -Sample, names_to = "Helper_ASV", values_to = "Abundance") %>%
     filter(!is.na(Abundance)) # Remove NA values
 
+  # Add a new column for the helper ASV label with the correlation coefficient
+  all_samples_long <- all_samples_long %>%
+    mutate(
+      Helper_Label = paste(Helper_ASV, " (",
+        round(helper_df$Correlation[match(Helper_ASV, helper_df$ASV)], 2),
+        ")",
+        sep = ""
+      )
+    )
   # Pull out the helper_df string
   helper_df_name <- as.character(match.call()[[3]])
   formatted_helper_df_name <- gsub("_", " ", helper_df_name) # Replace underscores with spaces
@@ -96,20 +111,20 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   write.csv(taxa_data, file.path(output_directory, paste0(helper_df_name, "_helper_taxa.csv")), row.names = TRUE)
 
   ## ---- Plot Top 5 Samples----
-  ggplot(top_5_samples_long, aes(x = Sample, y = Abundance, fill = Helper_ASV)) +
+  ggplot(top_5_samples_long, aes(x = Sample, y = Abundance, fill = Helper_Label)) +
     geom_bar(stat = "identity") +
-    theme_classic() + # Ensures a clean white background
+    theme_classic() +
     theme(
-      panel.grid = element_blank(), # Removes all grid lines
-      panel.background = element_rect(fill = "white", color = "white"), # White background
-      plot.background = element_rect(fill = "white", color = "white") # White outer background
+      panel.grid = element_blank(),
+      panel.background = element_rect(fill = "white", color = "white"),
+      plot.background = element_rect(fill = "white", color = "white"),
+      axis.text.x = element_text(angle = 45, hjust = 1)
     ) +
     labs(
-      title = paste("Top 5 Samples for", formatted_helper_df_name, "Helper ASVs"),
+      title = paste("Helper ASVs Abundance: Top 5 vs All Samples for", helper_df_name),
       x = "Samples", y = "Relative Abundance"
     ) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    scale_x_discrete(drop = FALSE) # Ensure all Sample levels are shown, even if some have no data
+    scale_x_discrete(drop = FALSE)
 
   # Save the plot
   ggsave(
@@ -118,7 +133,7 @@ process_helper_abundance <- function(asv_data, helper_df, output_directory) {
   )
 
   ## ---- Plot All Samples----
-  ggplot(all_samples_long, aes(x = Sample, y = Abundance, fill = Helper_ASV)) +
+  ggplot(all_samples_long, aes(x = Sample, y = Abundance, fill = Helper_Label)) +
     geom_bar(stat = "identity") +
     theme_classic() + # Ensures a clean white background
     theme(
